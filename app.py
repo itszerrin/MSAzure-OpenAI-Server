@@ -136,7 +136,7 @@ if __name__ == "__main__":
             exit(1)
 
         # create a cloudflare tunnel
-        #create_cloudflare_tunnel(config.get("PORT", 5000))
+        create_cloudflare_tunnel(config.get("PORT", 5000))
 
     app.run(
         host=config.get("HOST", "0.0.0.0"),
