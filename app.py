@@ -1,5 +1,9 @@
 import logging
 import os
+import sys
+
+# no pycache
+sys.dont_write_bytecode = True
 
 import json
 
@@ -25,9 +29,8 @@ except FileNotFoundError:
 def models():
     return jsonify({
         'data': [
-            {"id": "gpt-4", "name": "gpt-4-0125-preview", "context": 128000},
+            {"id": "gpt-4", "name": "gpt-4-turbo-2024-0409", "context": 128000},
             {"id": "gpt-4o", "name": "gpt-4o", "context": 128000},
-            {"id": "gpt-4-2", "name": "gpt-4-turbo-2024-04-09", "context": 128000},
         ]
     })
 
@@ -55,8 +58,40 @@ def chat():
     # Initialize API
     api = ChatAPI(token, os.environ['BASE_URL'], _legacy=config.get("COMPAT_MODE", False))
 
-    # Call the chat API
-    chatCompletion = api.chat(
+    @stream_with_context
+    def return_stream():
+
+        for line in api.chat(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            stream=stream,
+        ):
+            if line:
+
+                if "error" in line:
+                    return jsonify({"error": "You have probably hit a filter"}), 400
+
+                yield line
+
+    if stream:
+
+        return Response(
+            return_stream(),
+            status=200,
+            content_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Transfer-Encoding": "chunked"
+            },
+        )
+    
+    chatCompletion_nos = api.chat(
         model=model,
         messages=messages,
         temperature=temperature,
@@ -67,15 +102,9 @@ def chat():
         stream=stream,
     )
 
-    def generate(chatCompletion, stream):
-        if stream:
-            for line in chatCompletion:
-
-                yield line
-        else:
-            return chatCompletion
-
-    return Response(stream_with_context(generate(chatCompletion, stream)), content_type="text/event-stream")
+    # If not streaming, return as a JSON response
+    return jsonify(chatCompletion_nos)
+    
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -107,10 +136,11 @@ if __name__ == "__main__":
             exit(1)
 
         # create a cloudflare tunnel
-        create_cloudflare_tunnel(config.get("PORT", 5000))
+        #create_cloudflare_tunnel(config.get("PORT", 5000))
 
     app.run(
         host=config.get("HOST", "0.0.0.0"),
         port=config.get("PORT", 5000),
-        debug=config.get("DEBUG", False)
+        debug=config.get("DEBUG", False),
+        threaded=config.get("THREADED", True)
     )
