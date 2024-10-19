@@ -55,7 +55,6 @@ class ChatAPI:
 
         try:
             response = requests.post(self.endpoint, headers=self.headers, json=payload, stream=stream)
-
             response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
                                                                   
             if stream:
@@ -73,21 +72,20 @@ class ChatAPI:
 
                     for chunk in gen_compatiblity_mode(response, model=model):
 
-                        yield chunk
+                        yield chunk.decode()
 
             else:
-                return response.json()
+
+                return response.content
 
         except requests.RequestException as e:
-            if response.status_code == 401:
-
-               
+            if response.status_code == 401:               
                 return {"error": "Invalid token."}
+            
             elif response.status_code == 404:
                 return {"error": f"Model {model} has not been deployed yet."}
             
             if response.status_code == 429:
-
                 return {"error": "The current quota has been exceeded."}
             
             else:
